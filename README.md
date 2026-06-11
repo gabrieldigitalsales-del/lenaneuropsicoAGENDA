@@ -1,55 +1,19 @@
 # AGENDA LENA NEUROPSICÓLOGA
 
-Projeto React/Vite pronto para Vercel e Supabase.
+Versão corrigida para Supabase.
 
-## O que foi ajustado nesta versão
+## Correções desta versão
 
-- Layout premium mantendo o estilo do Base44 enviado nas imagens.
-- Responsivo para celular e desktop.
-- No celular, o menu fica embaixo, estilo aplicativo.
-- No desktop, o menu fica na lateral esquerda.
-- Cards, calendário, pacientes e ajustes repaginados.
-- Login simples apenas com senha.
-- Supabase pronto com tabelas isoladas `lena_neuro_2026_*`.
+- Salvamento no Supabase revisado.
+- Erros do Supabase aparecem na tela em vez de falhar escondido.
+- Indicador mostrando se está conectado ao Supabase ou em modo local.
+- Valor padrão sem preenchimento automático; aparece apenas placeholder `Ex: 500`.
+- Campos numéricos aceitam de 0 ao infinito, sem limite máximo.
+- `patient_id` vazio corrigido para `null`, evitando erro UUID no Supabase.
+- Updates não enviam `created_at`, `updated_at` nem tentam alterar o `id`.
+- Schema atualizado com `numeric` sem limite de tamanho.
 
-## Senha padrão
-
-```txt
-asd123
-```
-
-## Rodar no Termux
-
-1. Coloque o ZIP em Downloads.
-2. No Termux, rode:
-
-```bash
-termux-setup-storage
-cd ~/storage/downloads
-unzip agenda-lena-premium-responsiva-supabase.zip
-cd agenda-lena-base44-clone
-bash termux-start.sh
-```
-
-O script copia o projeto para a pasta interna do Termux para evitar erro de permissão/symlink do Android.
-
-Depois abra:
-
-```txt
-http://localhost:5173
-```
-
-## Supabase
-
-1. Crie um projeto no Supabase.
-2. Abra o SQL Editor.
-3. Rode o arquivo:
-
-```txt
-supabase/schema.sql
-```
-
-4. Crie um arquivo `.env` usando `.env.example` como base:
+## Variáveis obrigatórias na Vercel
 
 ```env
 VITE_SUPABASE_URL=https://SEU-PROJETO.supabase.co
@@ -57,6 +21,22 @@ VITE_SUPABASE_ANON_KEY=SUA_CHAVE_ANON_PUBLIC
 VITE_APP_PASSWORD=asd123
 ```
 
-## Vercel
+Se aparecer `Modo local`, as variáveis não foram configuradas corretamente na Vercel.
 
-Suba o projeto na Vercel e coloque as mesmas variáveis de ambiente.
+## Rodar no Termux
+
+```bash
+termux-setup-storage
+cd ~/storage/downloads
+unzip agenda-lena-supabase-save-fix.zip
+cd agenda-lena-supabase-save-fix
+bash termux-start.sh
+```
+
+## Supabase
+
+Rode o arquivo:
+
+```txt
+supabase/schema.sql
+```

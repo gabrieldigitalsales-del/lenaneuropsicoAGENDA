@@ -409,3 +409,22 @@ svg{display:block;flex:0 0 auto}
   .screen{max-width:1220px}
   .calendar-card{max-width:800px}
 }
+
+.connection-pill{
+  margin:12px 24px 0;
+  padding:9px 13px;
+  border-radius:999px;
+  font-size:12px;
+  font-weight:800;
+  letter-spacing:.02em;
+  display:inline-flex;
+  align-items:center;
+  max-width:calc(100% - 48px);
+  border:1px solid var(--line);
+  background:#fff;
+  color:#756960;
+  box-shadow:0 4px 12px rgba(62,48,40,.05);
+}
+.connection-pill.online{background:#e7f6ef;color:#4a8e72;border-color:#c5e7d7}
+.connection-pill.local{background:#fff4d9;color:#9b6e16;border-color:#efd99b}
+@media (min-width:900px){.connection-pill{margin-left:54px;margin-top:18px}}

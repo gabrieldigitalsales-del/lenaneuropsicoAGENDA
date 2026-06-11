@@ -11,7 +11,7 @@ const seedPatients = []
 const today = new Date()
 const isoToday = toISODate(today)
 const seedAppointments = []
-const defaultSettings = { id: 'main', clinic_name: 'Lena Neuropsicóloga', start_time: '08:00', end_time: '18:00', default_duration: 50, default_price: 200 }
+const defaultSettings = { id: 'main', clinic_name: 'Lena Neuropsicóloga', start_time: '08:00', end_time: '18:00', default_duration: 50, default_price: '' }
 
 function toISODate(date) {
   const d = new Date(date)
@@ -28,6 +28,26 @@ function monthTitle(date) {
 function uid(prefix='id') { return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}` }
 function loadLocal(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) || fallback } catch { return fallback } }
 function saveLocal(key, data) { localStorage.setItem(key, JSON.stringify(data)) }
+
+function cleanForSupabase(record) {
+  const clean = { ...record }
+  delete clean.created_at
+  delete clean.updated_at
+  Object.keys(clean).forEach((key) => {
+    if (clean[key] === '') clean[key] = null
+  })
+  return clean
+}
+function toNumberZero(value) {
+  if (value === '' || value === null || value === undefined) return 0
+  const n = Number(value)
+  return Number.isFinite(n) && n >= 0 ? n : 0
+}
+function showSupabaseError(action, error) {
+  console.error(action, error)
+  alert(`${action}: ${error?.message || 'erro desconhecido'}`)
+}
+
 
 function App() {
   const [logged, setLogged] = useState(localStorage.getItem('lena_logged') === 'yes')
@@ -88,11 +108,18 @@ function AgendaApp({ onLogout }) {
   useEffect(() => { refresh() }, [])
 
   async function savePatient(data) {
-    const record = { ...data, full_name: data.full_name.trim(), status: data.status || 'ativo' }
-    if (!record.full_name) return
+    const record = { ...data, full_name: (data.full_name || '').trim(), status: data.status || 'ativo' }
+    if (!record.full_name) { alert('Digite o nome do paciente.'); return }
     if (hasSupabase) {
-      if (record.id) await supabase.from('lena_neuro_2026_patients').update(record).eq('id', record.id)
-      else await supabase.from('lena_neuro_2026_patients').insert(record)
+      const payload = cleanForSupabase(record)
+      let result
+      if (payload.id) {
+        const { id, ...updatePayload } = payload
+        result = await supabase.from('lena_neuro_2026_patients').update(updatePayload).eq('id', id).select().single()
+      } else {
+        result = await supabase.from('lena_neuro_2026_patients').insert(payload).select().single()
+      }
+      if (result.error) { showSupabaseError('Não foi possível salvar o paciente no Supabase', result.error); return }
       await refresh()
     } else {
       let list = [...patients]
@@ -113,10 +140,29 @@ function AgendaApp({ onLogout }) {
   }
   async function saveAppointment(data) {
     const patient = patients.find(p => p.id === data.patient_id)
-    const record = { ...data, patient_name: patient?.full_name || data.patient_name, patient_phone: patient?.phone || data.patient_phone, price: Number(data.price || 0), duration_minutes: Number(data.duration_minutes || 50) }
+    const record = {
+      ...data,
+      patient_id: data.patient_id || null,
+      patient_name: patient?.full_name || data.patient_name || '',
+      patient_phone: patient?.phone || data.patient_phone || '',
+      price: toNumberZero(data.price),
+      duration_minutes: toNumberZero(data.duration_minutes),
+      status: data.status || 'agendada',
+      payment_status: data.payment_status || 'pendente',
+      service_type: data.service_type || 'Avaliação'
+    }
+    if (!record.patient_name) { alert('Selecione ou cadastre um paciente antes de salvar a consulta.'); return }
+    if (!record.appointment_date || !record.appointment_time) { alert('Informe data e horário da consulta.'); return }
     if (hasSupabase) {
-      if (record.id) await supabase.from('lena_neuro_2026_appointments').update(record).eq('id', record.id)
-      else await supabase.from('lena_neuro_2026_appointments').insert(record)
+      const payload = cleanForSupabase(record)
+      let result
+      if (payload.id) {
+        const { id, ...updatePayload } = payload
+        result = await supabase.from('lena_neuro_2026_appointments').update(updatePayload).eq('id', id).select().single()
+      } else {
+        result = await supabase.from('lena_neuro_2026_appointments').insert(payload).select().single()
+      }
+      if (result.error) { showSupabaseError('Não foi possível salvar a consulta no Supabase', result.error); return }
       await refresh()
     } else {
       let list = [...appointments]
@@ -136,8 +182,12 @@ function AgendaApp({ onLogout }) {
     else { const list = appointments.filter(a=>a.id!==id); setAppointments(list); saveLocal('lena_appointments', list) }
   }
   async function saveSettings(data) {
-    const record = { ...settings, ...data, default_duration: Number(data.default_duration), default_price: Number(data.default_price) }
-    if (hasSupabase) { await supabase.from('lena_neuro_2026_settings').upsert(record); await refresh() }
+    const record = { ...settings, ...data, id: 'main', default_duration: toNumberZero(data.default_duration), default_price: data.default_price === '' || data.default_price === null ? null : toNumberZero(data.default_price) }
+    if (hasSupabase) {
+      const { error } = await supabase.from('lena_neuro_2026_settings').upsert(cleanForSupabase(record), { onConflict: 'id' })
+      if (error) { showSupabaseError('Não foi possível salvar as configurações no Supabase', error); return }
+      await refresh()
+    }
     else { setSettings(record); saveLocal('lena_settings', record) }
     alert('Configurações salvas')
   }
@@ -150,6 +200,8 @@ function AgendaApp({ onLogout }) {
       <h1>AGENDA LENA<br/>NEUROPSICÓLOGA</h1>
       <button className="icon-only" onClick={onLogout}><LogOut size={24}/></button>
     </header>
+
+    <div className={`connection-pill ${hasSupabase ? 'online' : 'local'}`}>{hasSupabase ? 'Supabase conectado' : 'Modo local: configure o .env para salvar online'}</div>
 
     {loading && <div className="loading">Carregando...</div>}
 
@@ -245,7 +297,7 @@ function SettingsScreen({settings, onSave, patients, appointments}) {
     <section className="settings-card"><h2>Dados da Clínica</h2>
       <label>Nome da clínica / profissional<input value={form.clinic_name||''} onChange={e=>update('clinic_name',e.target.value)} /></label>
       <div className="two"><label>Horário de início<select value={form.start_time} onChange={e=>update('start_time',e.target.value)}>{timeOpts().map(t=><option key={t}>{t}</option>)}</select></label><label>Horário de término<select value={form.end_time} onChange={e=>update('end_time',e.target.value)}>{timeOpts().map(t=><option key={t}>{t}</option>)}</select></label></div>
-      <div className="two"><label>Duração padrão (min)<input type="number" value={form.default_duration||50} onChange={e=>update('default_duration',e.target.value)} /></label><label>Valor padrão (R$)<input type="number" value={form.default_price||200} onChange={e=>update('default_price',e.target.value)} /></label></div>
+      <div className="two"><label>Duração padrão (min)<input type="number" min="0" step="1" placeholder="Ex: 50" value={form.default_duration ?? ''} onChange={e=>update('default_duration',e.target.value)} /></label><label>Valor padrão (R$)<input type="number" min="0" step="0.01" placeholder="Ex: 500" value={form.default_price ?? ''} onChange={e=>update('default_price',e.target.value)} /></label></div>
       <button className="primary wide" onClick={()=>onSave(form)}><Save/> Salvar Configurações</button>
     </section>
     <section className="settings-card tools"><h2>Ferramentas</h2><button onClick={exportData}><Download/> Exportar backup</button><button onClick={()=>window.print()}><Printer/> Imprimir agenda</button></section>
@@ -257,9 +309,9 @@ function PatientModal({item,onClose,onSave}) {
   return <Modal title={item?'Editar Paciente':'Novo Paciente'} onClose={onClose}><label>Nome completo<input value={f.full_name||''} onChange={e=>u('full_name',e.target.value)} /></label><label>Telefone/WhatsApp<input value={f.phone||''} onChange={e=>u('phone',e.target.value)} /></label><label>Idade ou nascimento<input value={f.age||''} onChange={e=>u('age',e.target.value)} /></label><label>Responsável<input value={f.guardian_name||''} onChange={e=>u('guardian_name',e.target.value)} /></label><label>E-mail<input value={f.email||''} onChange={e=>u('email',e.target.value)} /></label><label>Status<select value={f.status||'ativo'} onChange={e=>u('status',e.target.value)}><option value="ativo">Ativo</option><option value="em_avaliacao">Em avaliação</option><option value="finalizado">Finalizado</option></select></label><label>Observações<textarea value={f.notes||''} onChange={e=>u('notes',e.target.value)} /></label><button className="primary wide" onClick={()=>onSave(f)}><Save/> Salvar</button></Modal>
 }
 function AppointmentModal({item,patients,selectedDate,settings,onClose,onSave,onCreatePatient}) {
-  const [f,setF]=useState(item || {patient_id: patients[0]?.id || '', patient_name:'', patient_phone:'', appointment_date:selectedDate, appointment_time:'09:00', duration_minutes:settings.default_duration, service_type:'Avaliação', status:'agendada', payment_status:'pendente', price:settings.default_price, room:'Sala 1', notes:''})
+  const [f,setF]=useState(item || {patient_id: patients[0]?.id || '', patient_name:'', patient_phone:'', appointment_date:selectedDate, appointment_time:'09:00', duration_minutes:settings.default_duration ?? 50, service_type:'Avaliação', status:'agendada', payment_status:'pendente', price:settings.default_price ?? '', room:'Sala 1', notes:''})
   const u=(k,v)=>setF({...f,[k]:v})
-  return <Modal title={item?'Editar Consulta':'Nova Consulta'} onClose={onClose}><label>Paciente<select value={f.patient_id||''} onChange={e=>u('patient_id',e.target.value)}><option value="">Selecionar paciente</option>{patients.map(p=><option key={p.id} value={p.id}>{p.full_name}</option>)}</select></label><button className="ghost" onClick={onCreatePatient}><Plus/> Cadastrar novo paciente</button><div className="two"><label>Data<input type="date" value={f.appointment_date} onChange={e=>u('appointment_date',e.target.value)} /></label><label>Horário<input type="time" value={f.appointment_time?.slice(0,5)} onChange={e=>u('appointment_time',e.target.value)} /></label></div><div className="two"><label>Duração<input type="number" value={f.duration_minutes} onChange={e=>u('duration_minutes',e.target.value)} /></label><label>Valor<input type="number" value={f.price} onChange={e=>u('price',e.target.value)} /></label></div><label>Tipo<input value={f.service_type||''} onChange={e=>u('service_type',e.target.value)} /></label><div className="two"><label>Status<select value={f.status} onChange={e=>u('status',e.target.value)}><option value="agendada">Agendada</option><option value="confirmada">Confirmada</option><option value="realizada">Realizada</option><option value="faltou">Faltou</option><option value="cancelada">Cancelada</option></select></label><label>Pagamento<select value={f.payment_status} onChange={e=>u('payment_status',e.target.value)}><option value="pendente">Pendente</option><option value="pago">Pago</option><option value="cortesia">Cortesia</option></select></label></div><label>Sala/local<input value={f.room||''} onChange={e=>u('room',e.target.value)} /></label><label>Observações<textarea value={f.notes||''} onChange={e=>u('notes',e.target.value)} /></label><button className="primary wide" onClick={()=>onSave(f)}><Save/> Salvar Consulta</button></Modal>
+  return <Modal title={item?'Editar Consulta':'Nova Consulta'} onClose={onClose}><label>Paciente<select value={f.patient_id||''} onChange={e=>u('patient_id',e.target.value)}><option value="">Selecionar paciente</option>{patients.map(p=><option key={p.id} value={p.id}>{p.full_name}</option>)}</select></label><button className="ghost" onClick={onCreatePatient}><Plus/> Cadastrar novo paciente</button><div className="two"><label>Data<input type="date" value={f.appointment_date} onChange={e=>u('appointment_date',e.target.value)} /></label><label>Horário<input type="time" value={f.appointment_time?.slice(0,5)} onChange={e=>u('appointment_time',e.target.value)} /></label></div><div className="two"><label>Duração<input type="number" min="0" step="1" placeholder="Ex: 50" value={f.duration_minutes ?? ''} onChange={e=>u('duration_minutes',e.target.value)} /></label><label>Valor<input type="number" min="0" step="0.01" placeholder="Ex: 500" value={f.price ?? ''} onChange={e=>u('price',e.target.value)} /></label></div><label>Tipo<input value={f.service_type||''} onChange={e=>u('service_type',e.target.value)} /></label><div className="two"><label>Status<select value={f.status} onChange={e=>u('status',e.target.value)}><option value="agendada">Agendada</option><option value="confirmada">Confirmada</option><option value="realizada">Realizada</option><option value="faltou">Faltou</option><option value="cancelada">Cancelada</option></select></label><label>Pagamento<select value={f.payment_status} onChange={e=>u('payment_status',e.target.value)}><option value="pendente">Pendente</option><option value="pago">Pago</option><option value="cortesia">Cortesia</option></select></label></div><label>Sala/local<input value={f.room||''} onChange={e=>u('room',e.target.value)} /></label><label>Observações<textarea value={f.notes||''} onChange={e=>u('notes',e.target.value)} /></label><button className="primary wide" onClick={()=>onSave(f)}><Save/> Salvar Consulta</button></Modal>
 }
 function Modal({title,children,onClose}) { return <div className="overlay"><section className="modal"><div className="modal-head"><h2>{title}</h2><button onClick={onClose}><X/></button></div>{children}</section></div> }
 function Badge({type,children}) { return <span className={`badge ${type}`}>{children}</span> }

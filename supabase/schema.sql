@@ -1,90 +1,86 @@
 -- ============================================================
--- AGENDA LENA NEUROPSICÓLOGA - SUPABASE SCHEMA CORRIGIDO
--- Prefixo único: lena_neuro_2026_
--- Campos numéricos de 0 ao infinito e app pronto para salvar no Supabase
+-- RESET TOTAL - AGENDA LENA NEUROPSICÓLOGA COM RECORRÊNCIA
+-- CUIDADO: ESTE SQL APAGA TODOS OS DADOS ANTIGOS
+-- Prefixo exclusivo: lena_neuro_2026_
 -- ============================================================
 
 create extension if not exists pgcrypto;
 
--- Remove triggers antigos que podem bloquear atualização da função
-drop trigger if exists lena_neuro_2026_patients_updated_at on public.lena_neuro_2026_patients;
-drop trigger if exists lena_neuro_2026_appointments_updated_at on public.lena_neuro_2026_appointments;
-drop trigger if exists lena_neuro_2026_tasks_updated_at on public.lena_neuro_2026_tasks;
-drop trigger if exists trg_lena_neuro_2026_patients_updated_at on public.lena_neuro_2026_patients;
-drop trigger if exists trg_lena_neuro_2026_appointments_updated_at on public.lena_neuro_2026_appointments;
-drop trigger if exists trg_lena_neuro_2026_tasks_updated_at on public.lena_neuro_2026_tasks;
+drop table if exists public.lena_neuro_2026_tasks cascade;
+drop table if exists public.lena_neuro_2026_appointments cascade;
+drop table if exists public.lena_neuro_2026_patients cascade;
+drop table if exists public.lena_neuro_2026_settings cascade;
 
 drop function if exists public.lena_neuro_2026_set_updated_at() cascade;
+drop function if exists public.lena_neuro_2026_sync_patient_snapshot() cascade;
 
--- Pacientes
-create table if not exists public.lena_neuro_2026_patients (
+create table public.lena_neuro_2026_patients (
   id uuid primary key default gen_random_uuid(),
   full_name text not null,
   phone text,
+  whatsapp text,
   birth_date date,
   age text,
   guardian_name text,
   email text,
   notes text,
-  status text not null default 'ativo',
+  important_notes text,
+  status text not null default 'ativo' check (status in ('ativo', 'em_avaliacao', 'finalizado', 'inativo')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
--- Consultas
-create table if not exists public.lena_neuro_2026_appointments (
+create table public.lena_neuro_2026_appointments (
   id uuid primary key default gen_random_uuid(),
   patient_id uuid references public.lena_neuro_2026_patients(id) on delete set null,
-  patient_name text not null,
+  patient_name text,
   patient_phone text,
+  patient_name_snapshot text,
+  patient_phone_snapshot text,
   appointment_date date not null,
   appointment_time time not null,
-  duration_minutes integer not null default 50,
+  duration_minutes integer not null default 50 check (duration_minutes >= 0),
   service_type text not null default 'Avaliação',
-  status text not null default 'agendada',
-  payment_status text not null default 'pendente',
-  price numeric default 0,
-  room text default 'Sala 1',
+  status text not null default 'agendada' check (status in ('agendada', 'aguardando_confirmacao', 'confirmada', 'realizada', 'remarcada', 'faltou', 'cancelada')),
+  payment_status text not null default 'pendente' check (payment_status in ('pago', 'pendente', 'cortesia')),
+  price numeric default null check (price is null or price >= 0),
+  room text,
+  location text,
   notes text,
+  private_notes text,
+  recurrence_group_id text,
+  recurrence_frequency text check (recurrence_frequency is null or recurrence_frequency in ('weekly', 'biweekly', 'monthly')),
+  recurrence_index integer check (recurrence_index is null or recurrence_index >= 1),
+  recurrence_total integer check (recurrence_total is null or recurrence_total >= 1),
+  recurrence_original_date date,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
--- Configurações
-create table if not exists public.lena_neuro_2026_settings (
+create table public.lena_neuro_2026_settings (
   id text primary key default 'main',
-  clinic_name text not null default 'Lena Neuropsicóloga',
+  clinic_name text not null default 'AGENDA LENA NEUROPSICÓLOGA',
   start_time text not null default '08:00',
   end_time text not null default '18:00',
-  default_duration integer not null default 50,
-  default_price numeric,
+  default_duration integer not null default 50 check (default_duration >= 0),
+  default_price numeric default null check (default_price is null or default_price >= 0),
+  default_room text,
+  default_service_type text default 'Avaliação',
   updated_at timestamptz not null default now()
 );
 
--- Ajustes em projetos que já tinham schema antigo
-alter table public.lena_neuro_2026_appointments
-  alter column price type numeric,
-  alter column price set default 0;
+create table public.lena_neuro_2026_tasks (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  description text,
+  task_date date,
+  task_time time,
+  status text not null default 'pendente' check (status in ('pendente', 'concluida', 'cancelada')),
+  priority text not null default 'normal' check (priority in ('baixa', 'normal', 'alta')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
 
-alter table public.lena_neuro_2026_settings
-  alter column default_price type numeric,
-  alter column default_price drop not null,
-  alter column default_price drop default;
-
--- Regras: números nunca negativos, sem limite máximo
-alter table public.lena_neuro_2026_appointments drop constraint if exists lena_neuro_2026_appointments_price_nonnegative;
-alter table public.lena_neuro_2026_appointments add constraint lena_neuro_2026_appointments_price_nonnegative check (price is null or price >= 0);
-
-alter table public.lena_neuro_2026_appointments drop constraint if exists lena_neuro_2026_appointments_duration_nonnegative;
-alter table public.lena_neuro_2026_appointments add constraint lena_neuro_2026_appointments_duration_nonnegative check (duration_minutes >= 0);
-
-alter table public.lena_neuro_2026_settings drop constraint if exists lena_neuro_2026_settings_default_price_nonnegative;
-alter table public.lena_neuro_2026_settings add constraint lena_neuro_2026_settings_default_price_nonnegative check (default_price is null or default_price >= 0);
-
-alter table public.lena_neuro_2026_settings drop constraint if exists lena_neuro_2026_settings_default_duration_nonnegative;
-alter table public.lena_neuro_2026_settings add constraint lena_neuro_2026_settings_default_duration_nonnegative check (default_duration >= 0);
-
--- Função updated_at
 create or replace function public.lena_neuro_2026_set_updated_at()
 returns trigger as $$
 begin
@@ -93,55 +89,40 @@ begin
 end;
 $$ language plpgsql;
 
-create trigger lena_neuro_2026_patients_updated_at
-before update on public.lena_neuro_2026_patients
-for each row execute function public.lena_neuro_2026_set_updated_at();
+create trigger trg_lena_neuro_2026_patients_updated_at before update on public.lena_neuro_2026_patients for each row execute function public.lena_neuro_2026_set_updated_at();
+create trigger trg_lena_neuro_2026_appointments_updated_at before update on public.lena_neuro_2026_appointments for each row execute function public.lena_neuro_2026_set_updated_at();
+create trigger trg_lena_neuro_2026_tasks_updated_at before update on public.lena_neuro_2026_tasks for each row execute function public.lena_neuro_2026_set_updated_at();
 
-create trigger lena_neuro_2026_appointments_updated_at
-before update on public.lena_neuro_2026_appointments
-for each row execute function public.lena_neuro_2026_set_updated_at();
+create or replace function public.lena_neuro_2026_sync_patient_snapshot()
+returns trigger as $$
+begin
+  if new.patient_name is null and new.patient_name_snapshot is not null then new.patient_name = new.patient_name_snapshot; end if;
+  if new.patient_name_snapshot is null and new.patient_name is not null then new.patient_name_snapshot = new.patient_name; end if;
+  if new.patient_phone is null and new.patient_phone_snapshot is not null then new.patient_phone = new.patient_phone_snapshot; end if;
+  if new.patient_phone_snapshot is null and new.patient_phone is not null then new.patient_phone_snapshot = new.patient_phone; end if;
+  return new;
+end;
+$$ language plpgsql;
 
--- Configuração inicial: valor padrão fica vazio no banco; no app aparece placeholder Ex: 500
-insert into public.lena_neuro_2026_settings
-(id, clinic_name, start_time, end_time, default_duration, default_price)
-values
-('main', 'Lena Neuropsicóloga', '08:00', '18:00', 50, null)
-on conflict (id) do update set
-  clinic_name = excluded.clinic_name,
-  start_time = excluded.start_time,
-  end_time = excluded.end_time,
-  default_duration = excluded.default_duration,
-  default_price = excluded.default_price,
-  updated_at = now();
+create trigger trg_lena_neuro_2026_sync_patient_snapshot before insert or update on public.lena_neuro_2026_appointments for each row execute function public.lena_neuro_2026_sync_patient_snapshot();
 
--- RLS
+insert into public.lena_neuro_2026_settings (id, clinic_name, start_time, end_time, default_duration, default_price, default_room, default_service_type)
+values ('main', 'AGENDA LENA NEUROPSICÓLOGA', '08:00', '18:00', 50, null, null, 'Avaliação');
+
 alter table public.lena_neuro_2026_patients enable row level security;
 alter table public.lena_neuro_2026_appointments enable row level security;
 alter table public.lena_neuro_2026_settings enable row level security;
+alter table public.lena_neuro_2026_tasks enable row level security;
 
-drop policy if exists "lena_neuro_2026_patients_all" on public.lena_neuro_2026_patients;
-drop policy if exists "lena_neuro_2026_appointments_all" on public.lena_neuro_2026_appointments;
-drop policy if exists "lena_neuro_2026_settings_all" on public.lena_neuro_2026_settings;
+create policy "lena_neuro_2026_patients_all" on public.lena_neuro_2026_patients for all using (true) with check (true);
+create policy "lena_neuro_2026_appointments_all" on public.lena_neuro_2026_appointments for all using (true) with check (true);
+create policy "lena_neuro_2026_settings_all" on public.lena_neuro_2026_settings for all using (true) with check (true);
+create policy "lena_neuro_2026_tasks_all" on public.lena_neuro_2026_tasks for all using (true) with check (true);
 
-create policy "lena_neuro_2026_patients_all"
-on public.lena_neuro_2026_patients
-for all
-using (true)
-with check (true);
-
-create policy "lena_neuro_2026_appointments_all"
-on public.lena_neuro_2026_appointments
-for all
-using (true)
-with check (true);
-
-create policy "lena_neuro_2026_settings_all"
-on public.lena_neuro_2026_settings
-for all
-using (true)
-with check (true);
-
--- Índices
-create index if not exists lena_neuro_2026_appointments_date_idx on public.lena_neuro_2026_appointments(appointment_date);
-create index if not exists lena_neuro_2026_appointments_patient_idx on public.lena_neuro_2026_appointments(patient_id);
-create index if not exists lena_neuro_2026_patients_name_idx on public.lena_neuro_2026_patients(full_name);
+create index lena_neuro_2026_patients_full_name_idx on public.lena_neuro_2026_patients(full_name);
+create index lena_neuro_2026_patients_phone_idx on public.lena_neuro_2026_patients(phone);
+create index lena_neuro_2026_appointments_date_idx on public.lena_neuro_2026_appointments(appointment_date);
+create index lena_neuro_2026_appointments_patient_id_idx on public.lena_neuro_2026_appointments(patient_id);
+create index lena_neuro_2026_appointments_status_idx on public.lena_neuro_2026_appointments(status);
+create index lena_neuro_2026_appointments_recurrence_idx on public.lena_neuro_2026_appointments(recurrence_group_id);
+create index lena_neuro_2026_tasks_date_idx on public.lena_neuro_2026_tasks(task_date);

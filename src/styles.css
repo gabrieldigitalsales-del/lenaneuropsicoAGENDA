@@ -496,3 +496,9 @@ svg{display:block;flex:0 0 auto}
   .today-hero .primary{min-height:48px;padding:0 18px;font-size:13px}
   .section-label{margin-top:26px}
 }
+
+.form-hint {
+  margin: -6px 0 12px;
+  font-size: 0.86rem;
+  color: #6b7280;
+}

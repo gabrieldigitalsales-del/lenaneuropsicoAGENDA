@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { CalendarDays, Clock3, Edit3, LogOut, MapPin, Phone, Plus, Save, Search, Settings, Sun, Trash2, UsersRound, History, ChevronLeft, ChevronRight, Download, Printer, X, MessageCircle, AlertTriangle, WalletCards, Repeat2, CheckCircle2 } from 'lucide-react'
+import { CalendarDays, Clock3, Edit3, LogOut, MapPin, Phone, Plus, Save, Search, Settings, Sun, Trash2, UsersRound, History, ChevronLeft, ChevronRight, Download, Printer, X, MessageCircle, AlertTriangle, WalletCards, Repeat2, CheckCircle2, BarChart3, TrendingUp, CircleDollarSign } from 'lucide-react'
 import { hasSupabase, supabase } from './supabaseClient'
 import './styles.css'
 
@@ -39,6 +39,10 @@ function whatsappUrl(phone, appointment = null, fallbackName = 'paciente') {
   return `https://wa.me/${br}?text=${encodeURIComponent(text)}`
 }
 function formatDateBR(iso){ return new Intl.DateTimeFormat('pt-BR').format(dateFromISO(iso)) }
+function money(value){ return new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL' }).format(Number(value || 0)) }
+function monthKeyFromISO(iso){ return String(iso || '').slice(0,7) }
+function currentMonthKey(){ return isoToday.slice(0,7) }
+function monthLabelFromKey(key){ if(!key) return 'Todos os meses'; const [y,m]=key.split('-').map(Number); return new Intl.DateTimeFormat('pt-BR', { month:'long', year:'numeric' }).format(new Date(y, m-1, 1)).replace(/^./, c=>c.toUpperCase()) }
 function cleanForSupabase(record) {
   const clean = { ...record }
   delete clean.created_at
@@ -237,8 +241,9 @@ function AgendaApp({ onLogout }) {
     {!loading && tab === 'hoje' && <TodayScreen selectedDate={isoToday} appointments={todayAppointments} pendingPayments={pendingPayments} nextAppointment={nextAppointment} onNew={()=>{setSelectedDate(isoToday); setModal({type:'appointment'})}} onEdit={(a)=>setModal({type:'appointment', item:a})} onDelete={deleteAppointment} />}
     {!loading && tab === 'agenda' && <CalendarScreen calendarMonth={calendarMonth} setCalendarMonth={setCalendarMonth} selectedDate={selectedDate} setSelectedDate={setSelectedDate} appointments={appointments} dayAppointments={dayAppointments} onNew={()=>setModal({type:'appointment'})} onEdit={(a)=>setModal({type:'appointment', item:a})} onDelete={deleteAppointment} />}
     {!loading && tab === 'pacientes' && <PatientsScreen patients={patients} appointments={appointments} onNew={()=>setModal({type:'patient'})} onEdit={(p)=>setModal({type:'patient', item:p})} onDelete={deletePatient} />}
+    {!loading && tab === 'financeiro' && <FinanceScreen appointments={appointments} patients={patients} onEdit={(a)=>setModal({type:'appointment', item:a})} />}
     {!loading && tab === 'ajustes' && <SettingsScreen settings={settings} onSave={saveSettings} patients={patients} appointments={appointments} pendingPayments={pendingPayments} />}
-    <nav className="bottom-nav"><button className={tab==='hoje'?'active':''} onClick={()=>setTab('hoje')}><Sun/><span>Hoje</span></button><button className={tab==='agenda'?'active':''} onClick={()=>setTab('agenda')}><CalendarDays/><span>Agenda</span></button><button className={tab==='pacientes'?'active':''} onClick={()=>setTab('pacientes')}><UsersRound/><span>Pacientes</span></button><button className={tab==='ajustes'?'active':''} onClick={()=>setTab('ajustes')}><Settings/><span>Ajustes</span></button></nav>
+    <nav className="bottom-nav"><button className={tab==='hoje'?'active':''} onClick={()=>setTab('hoje')}><Sun/><span>Hoje</span></button><button className={tab==='agenda'?'active':''} onClick={()=>setTab('agenda')}><CalendarDays/><span>Agenda</span></button><button className={tab==='pacientes'?'active':''} onClick={()=>setTab('pacientes')}><UsersRound/><span>Pacientes</span></button><button className={tab==='financeiro'?'active':''} onClick={()=>setTab('financeiro')}><BarChart3/><span>Financeiro</span></button><button className={tab==='ajustes'?'active':''} onClick={()=>setTab('ajustes')}><Settings/><span>Ajustes</span></button></nav>
     {modal?.type === 'patient' && <PatientModal item={modal.item} onClose={()=>setModal(null)} onSave={savePatient} />}
     {modal?.type === 'appointment' && <AppointmentModal item={modal.item} patients={patients} selectedDate={selectedDate} settings={settings} onClose={()=>setModal(null)} onSave={saveAppointment} onUpdateGroup={updateRecurringGroup} />}
   </div>
@@ -286,6 +291,55 @@ function PatientCard({p, appointments, onEdit, onDelete}) {
   const w = whatsappUrl(p.phone || p.whatsapp, next || null, p.full_name)
   return <article className="patient-card"><div className="patient-main"><h3>{p.full_name}</h3><Badge type={p.status}>{labelPatient(p.status)}</Badge></div><div className="patient-actions"><button onClick={onEdit}><Edit3/></button><button onClick={onDelete}><Trash2/></button></div><span className="phone-line"><Phone size={18}/> {p.phone || p.whatsapp || 'Sem telefone'}</span>{p.guardian_name && <p>Resp: {p.guardian_name}</p>}{p.notes && <em>{p.notes}</em>}<div className="history-grid"><span><b>{appointments.length}</b> total</span><span><b>{done}</b> realizadas</span><span><b>{missed}</b> faltas</span><span><b>{pending}</b> pendências</span></div>{next && <small>Próxima: {formatDateBR(next.appointment_date)} às {String(next.appointment_time).slice(0,5)}</small>}<div className="quick-row">{w && <a className="whatsapp-btn" href={w} target="_blank" rel="noreferrer"><MessageCircle size={16}/> WhatsApp</a>}</div></article>
 }
+
+function FinanceScreen({appointments, patients, onEdit}) {
+  const months = useMemo(() => {
+    const set = new Set(appointments.map(a => monthKeyFromISO(a.appointment_date)).filter(Boolean))
+    set.add(currentMonthKey())
+    return Array.from(set).sort().reverse()
+  }, [appointments])
+  const [month,setMonth] = useState(currentMonthKey())
+  const [status,setStatus] = useState('todos')
+  const filtered = appointments
+    .filter(a => a.status !== 'cancelada')
+    .filter(a => !month || monthKeyFromISO(a.appointment_date) === month)
+    .filter(a => status === 'todos' ? true : a.payment_status === status)
+    .sort((a,b)=>`${b.appointment_date} ${b.appointment_time||''}`.localeCompare(`${a.appointment_date} ${a.appointment_time||''}`))
+  const paid = filtered.filter(a=>a.payment_status==='pago')
+  const pending = filtered.filter(a=>a.payment_status==='pendente')
+  const courtesy = filtered.filter(a=>a.payment_status==='cortesia')
+  const realized = filtered.filter(a=>a.status==='realizada')
+  const totalExpected = filtered.reduce((sum,a)=>sum + Number(a.price || 0), 0)
+  const totalPaid = paid.reduce((sum,a)=>sum + Number(a.price || 0), 0)
+  const totalPending = pending.reduce((sum,a)=>sum + Number(a.price || 0), 0)
+  const ticket = paid.length ? totalPaid / paid.length : 0
+  const monthRows = months.map(m => {
+    const list = appointments.filter(a=>a.status !== 'cancelada' && monthKeyFromISO(a.appointment_date) === m)
+    const paidValue = list.filter(a=>a.payment_status==='pago').reduce((sum,a)=>sum + Number(a.price || 0), 0)
+    const pendingValue = list.filter(a=>a.payment_status==='pendente').reduce((sum,a)=>sum + Number(a.price || 0), 0)
+    return { month:m, paidValue, pendingValue, count:list.length }
+  }).slice(0,6)
+  function exportCsv(){
+    const header = ['Data','Horario','Paciente','Servico','Status','Pagamento','Valor']
+    const rows = filtered.map(a => [formatDateBR(a.appointment_date), String(a.appointment_time||'').slice(0,5), a.patient_name || a.patient_name_snapshot || '', a.service_type || '', labelStatus(a.status), labelPay(a.payment_status), String(Number(a.price||0).toFixed(2)).replace('.', ',')])
+    const csv = [header, ...rows].map(row => row.map(cell => `"${String(cell).replaceAll('"','""')}"`).join(';')).join('\n')
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'})
+    const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`financeiro-lena-${month || 'todos'}.csv`; a.click()
+  }
+  return <main className="screen finance-screen"><PageTitle kicker="FINANCEIRO" title="Controle Financeiro" />
+    <section className="finance-filters"><label>Mês<select value={month} onChange={e=>setMonth(e.target.value)}><option value="">Todos os meses</option>{months.map(m=><option key={m} value={m}>{monthLabelFromKey(m)}</option>)}</select></label><label>Pagamento<select value={status} onChange={e=>setStatus(e.target.value)}><option value="todos">Todos</option><option value="pago">Pago</option><option value="pendente">Pendente</option><option value="cortesia">Cortesia</option></select></label><button className="primary small" onClick={exportCsv}><Download/> Exportar CSV</button></section>
+    <section className="finance-grid">
+      <FinanceCard icon={<CircleDollarSign/>} label="Recebido" value={money(totalPaid)} hint={`${paid.length} pagamento${paid.length===1?'':'s'} pago${paid.length===1?'':'s'}`} />
+      <FinanceCard icon={<WalletCards/>} label="A receber" value={money(totalPending)} hint={`${pending.length} pendência${pending.length===1?'':'s'}`} />
+      <FinanceCard icon={<TrendingUp/>} label="Previsto" value={money(totalExpected)} hint={`${filtered.length} consulta${filtered.length===1?'':'s'} no filtro`} />
+      <FinanceCard icon={<CheckCircle2/>} label="Ticket médio" value={money(ticket)} hint={`${realized.length} realizada${realized.length===1?'':'s'} • ${courtesy.length} cortesia${courtesy.length===1?'':'s'}`} />
+    </section>
+    <section className="settings-card finance-summary"><h2>Resumo por mês</h2>{monthRows.length ? monthRows.map(r=><div key={r.month} className="month-line"><div><b>{monthLabelFromKey(r.month)}</b><span>{r.count} consulta{r.count===1?'':'s'}</span></div><strong>{money(r.paidValue)}</strong><em>{money(r.pendingValue)} pendente</em></div>) : <Empty text="Nenhum lançamento financeiro." />}</section>
+    <section className="settings-card finance-list"><h2>Lançamentos</h2>{filtered.length ? filtered.map(a=><button key={a.id} className="finance-row" onClick={()=>onEdit(a)}><div><b>{a.patient_name || a.patient_name_snapshot || 'Paciente'}</b><span>{formatDateBR(a.appointment_date)} • {String(a.appointment_time||'').slice(0,5)} • {a.service_type}</span></div><strong>{money(a.price)}</strong><Badge type={a.payment_status}>{labelPay(a.payment_status)}</Badge></button>) : <Empty text="Nenhuma consulta encontrada neste filtro." />}</section>
+  </main>
+}
+function FinanceCard({icon,label,value,hint}) { return <article className="finance-card"><div>{icon}</div><span>{label}</span><b>{value}</b><p>{hint}</p></article> }
+
 function SettingsScreen({settings, onSave, patients, appointments, pendingPayments}) {
   const [form,setForm] = useState(settings); useEffect(()=>setForm(settings),[settings]); function update(k,v){ setForm({...form,[k]:v}) }
   function exportData(){ const blob = new Blob([JSON.stringify({patients,appointments,settings}, null, 2)], {type:'application/json'}); const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='backup-agenda-lena.json'; a.click() }

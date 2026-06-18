@@ -45,3 +45,22 @@ Nesta versão, o cadastro de paciente ficou separado da marcação de consulta. 
 
 1. Cadastrar o paciente na aba **Pacientes**.
 2. Depois abrir a aba **Agenda** ou **Hoje** e marcar a consulta selecionando o paciente já cadastrado.
+
+
+## Atualização - Dashboard Financeiro
+
+Esta versão adiciona a aba **Financeiro**, usando os próprios dados das consultas. Não precisa rodar SQL novo.
+
+Recursos adicionados:
+
+- resumo de valores recebidos;
+- valores pendentes;
+- previsão total do mês;
+- ticket médio;
+- filtro por mês;
+- filtro por pagamento: pago, pendente ou cortesia;
+- resumo por mês;
+- lista de lançamentos financeiros;
+- exportação CSV dos lançamentos filtrados.
+
+O controle financeiro usa as colunas que já existem nas consultas: `price` e `payment_status`.

@@ -34,8 +34,8 @@ function whatsappUrl(phone, appointment = null, fallbackName = 'paciente') {
   const dateText = appointment?.appointment_date ? formatDateBR(appointment.appointment_date) : ''
   const timeText = appointment?.appointment_time ? ` às ${String(appointment.appointment_time).slice(0,5)}` : ''
   const text = appointment
-    ? `Olá *${patientName}*, passando para confirmar sua consulta com Lena Neuropsicóloga no dia *${dateText}${timeText}*.`
-    : `Olá *${patientName}*, tudo bem?`
+    ? `Oi *${patientName}*, sua consulta com Lena Neuropsicóloga está marcada para o dia *${dateText}${timeText}*. Podemos confirmar?`
+    : `Oi *${patientName}*, tudo bem?`
   return `https://wa.me/${br}?text=${encodeURIComponent(text)}`
 }
 function formatDateBR(iso){ return new Intl.DateTimeFormat('pt-BR').format(dateFromISO(iso)) }
@@ -278,11 +278,12 @@ function PatientsScreen({patients, appointments, onNew, onEdit, onDelete}) {
   return <main className="screen"><PageTitle kicker="PACIENTES" title="Meus Pacientes" /><div className="search-row"><label><Search/><input placeholder="Buscar por nome ou telefone..." value={q} onChange={e=>setQ(e.target.value)} /></label><button className="square" onClick={onNew}><Plus/></button></div><div className="cards-list">{filtered.map(p => <PatientCard key={p.id} p={p} appointments={appointments.filter(a=>a.patient_id===p.id)} onEdit={()=>onEdit(p)} onDelete={()=>onDelete(p.id)} />)}</div></main>
 }
 function PatientCard({p, appointments, onEdit, onDelete}) {
-  const next = appointments.filter(a=>a.appointment_date >= isoToday && a.status !== 'cancelada').sort((a,b)=>a.appointment_date.localeCompare(b.appointment_date))[0]
+  const next = appointments.filter(a=>a.appointment_date >= isoToday && a.status !== 'cancelada').sort((a,b)=>`${a.appointment_date} ${a.appointment_time||''}`.localeCompare(`${b.appointment_date} ${b.appointment_time||''}`))[0]
   const done = appointments.filter(a=>a.status==='realizada').length
   const missed = appointments.filter(a=>a.status==='faltou').length
   const pending = appointments.filter(a=>a.payment_status==='pendente' && a.status!=='cancelada').length
-  const w = whatsappUrl(p.phone || p.whatsapp, null, p.full_name)
+  // Na aba Pacientes, usa a próxima consulta para montar a mensagem automática com data e horário.
+  const w = whatsappUrl(p.phone || p.whatsapp, next || null, p.full_name)
   return <article className="patient-card"><div className="patient-main"><h3>{p.full_name}</h3><Badge type={p.status}>{labelPatient(p.status)}</Badge></div><div className="patient-actions"><button onClick={onEdit}><Edit3/></button><button onClick={onDelete}><Trash2/></button></div><span className="phone-line"><Phone size={18}/> {p.phone || p.whatsapp || 'Sem telefone'}</span>{p.guardian_name && <p>Resp: {p.guardian_name}</p>}{p.notes && <em>{p.notes}</em>}<div className="history-grid"><span><b>{appointments.length}</b> total</span><span><b>{done}</b> realizadas</span><span><b>{missed}</b> faltas</span><span><b>{pending}</b> pendências</span></div>{next && <small>Próxima: {formatDateBR(next.appointment_date)} às {String(next.appointment_time).slice(0,5)}</small>}<div className="quick-row">{w && <a className="whatsapp-btn" href={w} target="_blank" rel="noreferrer"><MessageCircle size={16}/> WhatsApp</a>}</div></article>
 }
 function SettingsScreen({settings, onSave, patients, appointments, pendingPayments}) {

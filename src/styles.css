@@ -573,3 +573,7 @@ svg{display:block;flex:0 0 auto}
 .lena-notification-item.is-seen .lena-notification-dot{background:#d7d0c8}
 .lena-notification-empty{padding:24px 12px;color:#8d8076;text-align:center;font-size:12px}
 @media(max-width:520px){.lena-header-actions{gap:0}.lena-header-actions .icon-only{padding:9px}.lena-notifications{top:86px}.lena-bell-count{right:-2px}}
+
+.lena-inline-conflict{display:flex;align-items:flex-start;gap:9px;margin:10px 0 15px;padding:12px 14px;background:#fbf0eb;border:1px solid #e7cfc3;border-radius:12px;color:#8a4e3c;font-size:12px;line-height:1.5}
+.lena-inline-conflict svg{flex-shrink:0;margin-top:1px}
+.lena-inline-conflict b{font-weight:850}

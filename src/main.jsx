@@ -266,7 +266,7 @@ function AgendaApp({ onLogout }) {
 
   return <div className="phone-app">
     <header className="topbar"><h1>AGENDA LENA<br/>NEUROPSICÓLOGA</h1><button className="icon-only" onClick={onLogout}><LogOut size={24}/></button></header>
-    <div className={`connection-pill ${hasSupabase ? 'online' : 'local'}`}>{hasSupabase ? 'Supabase conectado' : 'Modo local: configure o .env para salvar online'}</div>
+
     {loading && <div className="loading">Carregando...</div>}
     {!loading && tab === 'hoje' && <TodayScreen selectedDate={isoToday} appointments={todayAppointments} pendingPayments={pendingPayments} nextAppointment={nextAppointment} onNew={()=>{setSelectedDate(isoToday); setModal({type:'appointment'})}} onEdit={(a)=>setModal({type:'appointment', item:a})} onDelete={deleteAppointment} />}
     {!loading && tab === 'agenda' && <CalendarScreen calendarMonth={calendarMonth} setCalendarMonth={setCalendarMonth} selectedDate={selectedDate} setSelectedDate={setSelectedDate} appointments={appointments} dayAppointments={dayAppointments} onNew={()=>setModal({type:'appointment'})} onEdit={(a)=>setModal({type:'appointment', item:a})} onDelete={deleteAppointment} />}

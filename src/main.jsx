@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { CalendarDays, Clock3, Edit3, LogOut, MapPin, Phone, Plus, Save, Search, Settings, Sun, Trash2, UsersRound, History, ChevronLeft, ChevronRight, Download, Printer, X, MessageCircle, AlertTriangle, WalletCards, Repeat2, CheckCircle2, BarChart3, TrendingUp, CircleDollarSign, Bell } from 'lucide-react'
 import { hasSupabase, supabase } from './supabaseClient'
@@ -116,9 +116,32 @@ function AgendaApp({ onLogout }) {
   const [modal, setModal] = useState(null)
   const [loading, setLoading] = useState(true)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const notificationPanelRef = useRef(null)
+  const notificationButtonRef = useRef(null)
   const [seenNotifications, setSeenNotifications] = useState(() => {
     try { return JSON.parse(localStorage.getItem('lena_seen_notifications') || '[]') } catch { return [] }
   })
+  useEffect(() => {
+    if (!notificationsOpen) return
+    function handleOutside(event) {
+      const target = event.target
+      if (notificationPanelRef.current?.contains(target) || notificationButtonRef.current?.contains(target)) return
+      setNotificationsOpen(false)
+    }
+    function handleEscape(event) {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setNotificationsOpen(false)
+        notificationButtonRef.current?.focus()
+      }
+    }
+    document.addEventListener('pointerdown', handleOutside)
+    document.addEventListener('keydown', handleEscape)
+    return () => {
+      document.removeEventListener('pointerdown', handleOutside)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [notificationsOpen])
   const [clock, setClock] = useState(() => Date.now())
   useEffect(() => {
     const ticker = setInterval(() => setClock(Date.now()), 60000)
@@ -298,8 +321,23 @@ function AgendaApp({ onLogout }) {
   const nextAppointment = todayAppointments.find(a => a.status !== 'cancelada' && String(a.appointment_time).slice(0,5) >= new Date().toTimeString().slice(0,5))
 
   return <div className="phone-app">
-    <header className="topbar"><h1>AGENDA LENA<br/>NEUROPSICÓLOGA</h1><div className="lena-header-actions"><button className="icon-only lena-bell" aria-label={`Notificações: ${unreadCount} não lidas`} onClick={()=>setNotificationsOpen(v=>!v)}><Bell size={21}/>{unreadCount > 0 && <span className="lena-bell-count">{unreadCount > 99 ? '99+' : unreadCount}</span>}</button><button className="icon-only" aria-label="Sair da agenda" onClick={onLogout}><LogOut size={22}/></button></div></header>
-    {notificationsOpen && <div className="lena-notifications" role="region" aria-label="Notificações da agenda"><div className="lena-notification-heading"><strong>Próximas Consultas</strong><button onClick={()=>setNotificationsOpen(false)} aria-label="Fechar notificações"><X size={17}/></button></div><p>Consultas nas próximas 24 horas</p>{notifications.length ? notifications.map(item=><button className={`lena-notification-item ${seenNotifications.includes(item.id) ? 'is-seen' : ''}`} key={item.id} onClick={()=>openNotification(item)}><span className="lena-notification-dot"/><span><b>{item.patient_name || item.patient_name_snapshot || 'Paciente'}</b><small>{formatDateBR(item.appointment_date)} às {String(item.appointment_time).slice(0,5)} · {labelStatus(item.status)}</small></span><ChevronRight size={17}/></button>) : <div className="lena-notification-empty">Nenhuma consulta próxima.</div>}</div>}
+    <header className="topbar"><h1>AGENDA LENA<br/>NEUROPSICÓLOGA</h1><div className="lena-header-actions"><button ref={notificationButtonRef} className="icon-only lena-bell" aria-label={`Próximas consultas: ${unreadCount} não lidas`} aria-expanded={notificationsOpen} aria-controls="lena-notification-panel" aria-haspopup="dialog" onClick={()=>setNotificationsOpen(v=>!v)}><Bell size={21}/>{unreadCount > 0 && <span className="lena-bell-count">{unreadCount > 99 ? '99+' : unreadCount}</span>}</button><button className="icon-only" aria-label="Sair da agenda" onClick={onLogout}><LogOut size={22}/></button></div></header>
+    {notificationsOpen && <section ref={notificationPanelRef} id="lena-notification-panel" className="lena-notifications" role="dialog" aria-label="Próximas Consultas">
+      <div className="lena-notification-top">
+        <div className="lena-notification-icon"><Bell size={17}/></div>
+        <div className="lena-notification-heading"><h2>Próximas Consultas</h2><p>Agenda das próximas 24 horas</p></div>
+        <button className="lena-notification-close" type="button" aria-label="Fechar notificações" onClick={()=>setNotificationsOpen(false)}><X size={17}/></button>
+      </div>
+      <div className="lena-notification-list">
+        {notifications.length ? notifications.map(item => <button type="button" className={`lena-notification-item ${seenNotifications.includes(item.id) ? 'is-seen' : ''}`} key={item.id} onClick={()=>openNotification(item)}>
+          <span className="lena-notification-date"><strong>{String(item.appointment_time).slice(0,5)}</strong><small>{formatDateBR(item.appointment_date)}</small></span>
+          <span className="lena-notification-details"><b>{item.patient_name || item.patient_name_snapshot || 'Paciente'}</b><small>{labelStatus(item.status)} · Toque para abrir</small></span>
+          {!seenNotifications.includes(item.id) && <span className="lena-notification-unread" aria-label="Não lida"/>}
+          <ChevronRight className="lena-notification-arrow" size={16}/>
+        </button>) : <div className="lena-notification-empty"><CalendarDays size={22}/><strong>Nenhuma consulta próxima</strong><span>Quando houver consultas nas próximas 24 horas, elas aparecerão aqui.</span></div>}
+      </div>
+      <div className="lena-notification-footer">Clique fora ou pressione Esc para fechar</div>
+    </section>}
 
     {loading && <div className="loading">Carregando...</div>}
     {!loading && tab === 'hoje' && <TodayScreen selectedDate={isoToday} appointments={todayAppointments} pendingPayments={pendingPayments} nextAppointment={nextAppointment} onNew={()=>{setSelectedDate(isoToday); setModal({type:'appointment'})}} onEdit={(a)=>setModal({type:'appointment', item:a})} onDelete={deleteAppointment} />}

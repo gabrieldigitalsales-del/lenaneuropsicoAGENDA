@@ -422,7 +422,7 @@ function AppointmentModal({item,patients,appointments,selectedDate,settings,onCl
   })
   function save(){
     if (conflict && (!item?.recurrence_group_id || scope === 'one')) {
-      showNotice(`A consulta de ${conflict.patient_name || conflict.patient_name_snapshot || 'outro paciente'} já ocupa o período de ${String(conflict.appointment_time).slice(0,5)} até ${String(conflict.appointment_time).slice(0,5)} (duração de ${conflict.duration_minutes} minutos).\n\nEscolha um horário disponível.`, 'Horário indisponível')
+      showNotice(`A consulta de ${conflict.patient_name || conflict.patient_name_snapshot || 'outro paciente'} já ocupa o período de ${String(conflict.appointment_time).slice(0,5)} por ${conflict.duration_minutes} minutos.\n\nEscolha um horário disponível.`, 'Horário indisponível')
       return
     }
     if (item?.recurrence_group_id && scope !== 'one') { onUpdateGroup(item, {...f, patient_name:selectedPatient?.full_name || f.patient_name, patient_phone:selectedPatient?.phone || f.patient_phone}, scope); return }

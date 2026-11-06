@@ -175,11 +175,13 @@ function AgendaApp({ onLogout }) {
       setPatients(list); saveLocal('lena_patients', list)
     }
     setModal(null)
+    showNotice(record.id ? 'Os dados do paciente foram atualizados.' : 'Paciente cadastrado com sucesso.', 'Cadastro salvo')
   }
   async function deletePatient(id) {
     if (!(await askConfirmation('Excluir paciente? As consultas dele serão mantidas sem vínculo.', 'Excluir paciente'))) return
     if (hasSupabase) { const { error } = await supabase.from('lena_neuro_2026_patients').delete().eq('id', id); if (error) { showNotice('Não foi possível excluir o paciente: ' + error.message); return }; await refresh() }
     else { const list = patients.filter(p=>p.id!==id); const listA = appointments.map(a=>a.patient_id===id?{...a,patient_id:null}:a); setPatients(list); setAppointments(listA); saveLocal('lena_patients', list); saveLocal('lena_appointments', listA) }
+    showNotice('Paciente excluído com sucesso.', 'Exclusão concluída')
   }
   function appointmentMinutes(value) {
     const match = String(value || '').match(/^(\d{1,2}):(\d{2})/)
@@ -241,6 +243,7 @@ function AgendaApp({ onLogout }) {
       setAppointments(list); saveLocal('lena_appointments', list)
     }
     setModal(null)
+    showNotice(record.id ? 'A consulta foi atualizada com sucesso.' : (records.length > 1 ? `${records.length} consultas agendadas com sucesso.` : 'Consulta agendada com sucesso.'), 'Consulta salva')
   }
   async function updateRecurringGroup(item, updateData, scope) {
     if (!item.recurrence_group_id || scope === 'one') return saveAppointment({ ...item, ...updateData })
@@ -267,6 +270,7 @@ function AgendaApp({ onLogout }) {
       const ids = new Set(updates.map(u=>u.id)); const map = Object.fromEntries(updates.map(u=>[u.id,u])); const list = appointments.map(a=>ids.has(a.id)?map[a.id]:a); setAppointments(list); saveLocal('lena_appointments', list)
     }
     setModal(null)
+    showNotice('Consultas da recorrência atualizadas com sucesso.', 'Recorrência atualizada')
   }
   async function deleteAppointment(item) {
     let ids = [item.id]
@@ -279,6 +283,7 @@ function AgendaApp({ onLogout }) {
     if (!(await askConfirmation(`Excluir ${ids.length} consulta(s)? Essa ação não pode ser desfeita.`, 'Excluir consulta'))) return
     if (hasSupabase) { const { error } = await supabase.from('lena_neuro_2026_appointments').delete().in('id', ids); if (error) { showNotice('Não foi possível excluir a consulta: ' + error.message); return }; await refresh() }
     else { const set = new Set(ids); const list = appointments.filter(a=>!set.has(a.id)); setAppointments(list); saveLocal('lena_appointments', list) }
+    showNotice(ids.length > 1 ? `${ids.length} consultas excluídas com sucesso.` : 'Consulta excluída com sucesso.', 'Exclusão concluída')
   }
   async function saveSettings(data) {
     const record = { ...settings, ...data, id: 'main', default_duration: toNumberZero(data.default_duration), default_price: nullableNumber(data.default_price) }

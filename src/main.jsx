@@ -336,7 +336,7 @@ function AgendaApp({ onLogout }) {
           <ChevronRight className="lena-notification-arrow" size={16}/>
         </button>) : <div className="lena-notification-empty"><CalendarDays size={22}/><strong>Nenhuma consulta próxima</strong><span>Quando houver consultas nas próximas 24 horas, elas aparecerão aqui.</span></div>}
       </div>
-      <div className="lena-notification-footer">Clique fora ou pressione Esc para fechar</div>
+      
     </section>}</header>
 
     {loading && <div className="loading">Carregando...</div>}

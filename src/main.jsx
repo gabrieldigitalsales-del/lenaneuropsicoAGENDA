@@ -321,7 +321,7 @@ function AgendaApp({ onLogout }) {
   const nextAppointment = todayAppointments.find(a => a.status !== 'cancelada' && String(a.appointment_time).slice(0,5) >= new Date().toTimeString().slice(0,5))
 
   return <div className="phone-app">
-    <header className="topbar"><h1>AGENDA LENA<br/>NEUROPSICÓLOGA</h1><div className="lena-header-actions"><button ref={notificationButtonRef} className="icon-only lena-bell" aria-label={`Próximas consultas: ${unreadCount} não lidas`} aria-expanded={notificationsOpen} aria-controls="lena-notification-panel" aria-haspopup="dialog" onClick={()=>setNotificationsOpen(v=>!v)}><Bell size={21}/>{unreadCount > 0 && <span className="lena-bell-count">{unreadCount > 99 ? '99+' : unreadCount}</span>}</button><button className="icon-only" aria-label="Sair da agenda" onClick={onLogout}><LogOut size={22}/></button></div></header>
+    <header className="topbar"><h1>AGENDA LENA<br/>NEUROPSICÓLOGA</h1><div className="lena-header-actions"><button ref={notificationButtonRef} className="icon-only lena-bell" aria-label={`Próximas consultas: ${unreadCount} não lidas`} aria-expanded={notificationsOpen} aria-controls="lena-notification-panel" aria-haspopup="dialog" onClick={()=>setNotificationsOpen(v=>!v)}><Bell size={21}/>{unreadCount > 0 && <span className="lena-bell-count">{unreadCount > 99 ? '99+' : unreadCount}</span>}</button><button className="icon-only" aria-label="Sair da agenda" onClick={onLogout}><LogOut size={22}/></button></div>
     {notificationsOpen && <section ref={notificationPanelRef} id="lena-notification-panel" className="lena-notifications" role="dialog" aria-label="Próximas Consultas">
       <div className="lena-notification-top">
         <div className="lena-notification-icon"><Bell size={17}/></div>
@@ -337,7 +337,7 @@ function AgendaApp({ onLogout }) {
         </button>) : <div className="lena-notification-empty"><CalendarDays size={22}/><strong>Nenhuma consulta próxima</strong><span>Quando houver consultas nas próximas 24 horas, elas aparecerão aqui.</span></div>}
       </div>
       <div className="lena-notification-footer">Clique fora ou pressione Esc para fechar</div>
-    </section>}
+    </section>}</header>
 
     {loading && <div className="loading">Carregando...</div>}
     {!loading && tab === 'hoje' && <TodayScreen selectedDate={isoToday} appointments={todayAppointments} pendingPayments={pendingPayments} nextAppointment={nextAppointment} onNew={()=>{setSelectedDate(isoToday); setModal({type:'appointment'})}} onEdit={(a)=>setModal({type:'appointment', item:a})} onDelete={deleteAppointment} />}

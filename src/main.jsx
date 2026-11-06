@@ -83,7 +83,15 @@ function makeRecurringAppointments(record, opts) {
     recurrence_original_date: record.appointment_date
   }))
 }
-function showSupabaseError(action, error) { console.error(action, error); alert(`${action}: ${error?.message || 'erro desconhecido'}`) }
+function showSupabaseError(action, error) {
+  console.error(action, error)
+  const detail = String(error?.message || 'erro desconhecido')
+  if (detail.includes('HORARIO_OCUPADO') || (error?.code === '23505' && detail.includes('horário'))) {
+    alert('Horário ocupado. Já existe um paciente agendado nesse período. Escolha outro horário.')
+    return
+  }
+  alert(`${action}: ${detail}`)
+}
 
 function App() {
   const [logged, setLogged] = useState(localStorage.getItem('lena_logged') === 'yes')
@@ -146,8 +154,31 @@ function AgendaApp({ onLogout }) {
     if (hasSupabase) { const { error } = await supabase.from('lena_neuro_2026_patients').delete().eq('id', id); if (error) { alert('Não foi possível excluir o paciente: ' + error.message); return }; await refresh() }
     else { const list = patients.filter(p=>p.id!==id); const listA = appointments.map(a=>a.patient_id===id?{...a,patient_id:null}:a); setPatients(list); setAppointments(listA); saveLocal('lena_patients', list); saveLocal('lena_appointments', listA) }
   }
-  function detectConflicts(records) {
-    return records.filter(r => appointments.some(a => a.id !== r.id && a.appointment_date === r.appointment_date && String(a.appointment_time).slice(0,5) === String(r.appointment_time).slice(0,5) && !['cancelada'].includes(a.status)))
+  function appointmentMinutes(value) {
+    const match = String(value || '').match(/^(\d{1,2}):(\d{2})/)
+    return match ? Number(match[1]) * 60 + Number(match[2]) : NaN
+  }
+  function isActiveAppointment(item) {
+    return !['cancelada', 'remarcada'].includes(item.status)
+  }
+  function appointmentsOverlap(a, b) {
+    if (a.appointment_date !== b.appointment_date || !isActiveAppointment(a) || !isActiveAppointment(b)) return false
+    const startA = appointmentMinutes(a.appointment_time)
+    const startB = appointmentMinutes(b.appointment_time)
+    if (!Number.isFinite(startA) || !Number.isFinite(startB)) return false
+    const endA = startA + Math.max(1, toNumberZero(a.duration_minutes))
+    const endB = startB + Math.max(1, toNumberZero(b.duration_minutes))
+    return startA < endB && startB < endA
+  }
+  function detectConflicts(records, excludedIds = []) {
+    const ignore = new Set(excludedIds.filter(Boolean))
+    const external = records.filter(r => appointments.some(a => a.id !== r.id && !ignore.has(a.id) && appointmentsOverlap(a, r)))
+    const internal = records.filter((r, i) => records.some((other, j) => j < i && appointmentsOverlap(r, other)))
+    return [...external, ...internal]
+  }
+  function warnConflicts(conflicts) {
+    const summary = conflicts.slice(0, 6).map(c => `${formatDateBR(c.appointment_date)} às ${String(c.appointment_time).slice(0,5)}`).join('\n')
+    alert(`Horário ocupado. Não é possível colocar dois pacientes no mesmo período.\n\n${summary}\n\nEscolha outra data ou outro horário.`)
   }
   async function saveAppointment(data, recurrenceOpts={repeat:'none', count:1}) {
     const patient = patients.find(p => p.id === data.patient_id)
@@ -168,10 +199,7 @@ function AgendaApp({ onLogout }) {
     if (!record.appointment_date || !record.appointment_time) { alert('Informe data e horário da consulta.'); return }
     const records = makeRecurringAppointments(record, recurrenceOpts)
     const conflicts = detectConflicts(records)
-    if (conflicts.length) {
-      const msg = conflicts.slice(0,5).map(c => `${formatDateBR(c.appointment_date)} às ${String(c.appointment_time).slice(0,5)}`).join('\n')
-      if (!confirm(`Já existe consulta nesse(s) horário(s):\n${msg}\n\nDeseja salvar mesmo assim?`)) return
-    }
+    if (conflicts.length) { warnConflicts(conflicts); return }
     if (hasSupabase) {
       const payloads = records.map(cleanForSupabase)
       let result
@@ -203,8 +231,10 @@ function AgendaApp({ onLogout }) {
       patient_name_snapshot: updateData.patient_name || t.patient_name || t.patient_name_snapshot,
       patient_phone_snapshot: updateData.patient_phone || t.patient_phone || t.patient_phone_snapshot
     }))
+    const groupConflicts = detectConflicts(updates, targets.map(t => t.id))
+    if (groupConflicts.length) { warnConflicts(groupConflicts); return }
     if (hasSupabase) {
-      for (const rec of updates) { const { id, ...payload } = cleanForSupabase(rec); const { error } = await supabase.from('lena_neuro_2026_appointments').update(payload).eq('id', id); if (error) { showSupabaseError('Erro ao atualizar recorrência', error); return } }
+      for (const rec of updates) { const { id, ...payload } = cleanForSupabase(rec); const { error } = await supabase.from('lena_neuro_2026_appointments').update(payload).eq('id', id); if (error) { showSupabaseError('Erro ao atualizar recorrência', error); await refresh(); return } }
       await refresh()
     } else {
       const ids = new Set(updates.map(u=>u.id)); const map = Object.fromEntries(updates.map(u=>[u.id,u])); const list = appointments.map(a=>ids.has(a.id)?map[a.id]:a); setAppointments(list); saveLocal('lena_appointments', list)

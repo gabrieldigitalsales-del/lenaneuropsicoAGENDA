@@ -552,3 +552,24 @@ svg{display:block;flex:0 0 auto}
   .finance-card{padding:20px}.finance-card b{font-size:22px}
   .finance-summary,.finance-list{max-width:920px}
 }
+
+/* Notificações de consultas — Agenda Lena */
+.lena-header-actions{display:flex;align-items:center;gap:3px}
+.lena-bell{position:relative;display:inline-flex;align-items:center;justify-content:center}
+.lena-bell-count{position:absolute;top:1px;right:0;min-width:17px;height:17px;padding:0 4px;border-radius:20px;background:#96765b;color:white;font-size:9px;line-height:17px;font-weight:800;text-align:center;border:2px solid white;box-sizing:content-box}
+.lena-notifications{position:absolute;right:16px;top:calc(100px + 8px);width:min(390px,calc(100% - 32px));max-height:min(480px,65vh);overflow-y:auto;z-index:40;background:#fffcf8;border:1px solid #e7ded3;border-radius:20px;box-shadow:0 24px 55px rgba(46,32,23,.17);padding:14px}
+.lena-notification-heading{display:flex;align-items:center;justify-content:space-between;margin:2px 2px 2px}
+.lena-notification-heading strong{font-size:15px;color:#534335}
+.lena-notification-heading button{background:#f4ede6;color:#756153;border:0;border-radius:10px;width:29px;height:29px;display:grid;place-items:center;cursor:pointer}
+.lena-notifications>p{color:#86786a;font-size:11px;font-weight:650;margin:0 2px 12px}
+.lena-notification-item{width:100%;border:0;background:#fff;display:flex;align-items:center;gap:11px;text-align:left;border-radius:12px;padding:12px 10px;margin-top:6px;cursor:pointer;transition:background .2s}
+.lena-notification-item:hover{background:#f3ede6}
+.lena-notification-item.is-seen{opacity:.72}
+.lena-notification-item>span:nth-child(2){flex:1;min-width:0}
+.lena-notification-item b{display:block;font-size:12px;color:#544338;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lena-notification-item small{display:block;font-size:10px;color:#8d7a6b;margin-top:4px}
+.lena-notification-item>svg{flex-shrink:0;color:#9a8677}
+.lena-notification-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:#b88a5c}
+.lena-notification-item.is-seen .lena-notification-dot{background:#d7d0c8}
+.lena-notification-empty{padding:24px 12px;color:#8d8076;text-align:center;font-size:12px}
+@media(max-width:520px){.lena-header-actions{gap:0}.lena-header-actions .icon-only{padding:9px}.lena-notifications{top:86px}.lena-bell-count{right:-2px}}

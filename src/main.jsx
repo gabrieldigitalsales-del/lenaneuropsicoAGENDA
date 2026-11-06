@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { CalendarDays, Clock3, Edit3, LogOut, MapPin, Phone, Plus, Save, Search, Settings, Sun, Trash2, UsersRound, History, ChevronLeft, ChevronRight, Download, Printer, X, MessageCircle, AlertTriangle, WalletCards, Repeat2, CheckCircle2, BarChart3, TrendingUp, CircleDollarSign } from 'lucide-react'
+import { CalendarDays, Clock3, Edit3, LogOut, MapPin, Phone, Plus, Save, Search, Settings, Sun, Trash2, UsersRound, History, ChevronLeft, ChevronRight, Download, Printer, X, MessageCircle, AlertTriangle, WalletCards, Repeat2, CheckCircle2, BarChart3, TrendingUp, CircleDollarSign, Bell } from 'lucide-react'
 import { hasSupabase, supabase } from './supabaseClient'
 import './styles.css'
+import { showNotice, askConfirmation, askChoice, LenaDialogHost } from './LenaDialogs'
 
 const APP_PASSWORD = import.meta.env.VITE_APP_PASSWORD || 'asd123'
 const today = new Date()
@@ -87,10 +88,10 @@ function showSupabaseError(action, error) {
   console.error(action, error)
   const detail = String(error?.message || 'erro desconhecido')
   if (detail.includes('HORARIO_OCUPADO') || (error?.code === '23505' && detail.includes('horário'))) {
-    alert('Horário ocupado. Já existe um paciente agendado nesse período. Escolha outro horário.')
+    showNotice('Horário ocupado. Já existe um paciente agendado nesse período. Escolha outro horário.')
     return
   }
-  alert(`${action}: ${detail}`)
+  showNotice(`${action}: ${detail}`)
 }
 
 function App() {
@@ -114,6 +115,32 @@ function AgendaApp({ onLogout }) {
   const [calendarMonth, setCalendarMonth] = useState(new Date())
   const [modal, setModal] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [seenNotifications, setSeenNotifications] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('lena_seen_notifications') || '[]') } catch { return [] }
+  })
+  const [clock, setClock] = useState(() => Date.now())
+  useEffect(() => {
+    const ticker = setInterval(() => setClock(Date.now()), 60000)
+    return () => clearInterval(ticker)
+  }, [])
+  const notifications = useMemo(() => appointments
+    .filter(a => !['cancelada', 'remarcada', 'realizada', 'faltou'].includes(a.status))
+    .map(a => ({ ...a, timestamp: new Date(`${a.appointment_date}T${String(a.appointment_time).slice(0, 5)}:00`).getTime() }))
+    .filter(a => Number.isFinite(a.timestamp) && a.timestamp >= clock - 15 * 60000 && a.timestamp <= clock + 48 * 3600000)
+    .sort((a,b) => a.timestamp - b.timestamp)
+    .slice(0, 30), [appointments, clock])
+  const unreadCount = notifications.filter(a => !seenNotifications.includes(a.id)).length
+  function openNotification(item) {
+    const seen = Array.from(new Set([...seenNotifications, item.id]))
+    setSeenNotifications(seen)
+    localStorage.setItem('lena_seen_notifications', JSON.stringify(seen))
+    setSelectedDate(item.appointment_date)
+    setCalendarMonth(dateFromISO(item.appointment_date))
+    setTab('agenda')
+    setNotificationsOpen(false)
+    setModal({ type: 'appointment', item })
+  }
 
   async function refresh() {
     setLoading(true)
@@ -135,7 +162,7 @@ function AgendaApp({ onLogout }) {
 
   async function savePatient(data) {
     const record = { ...data, full_name: (data.full_name || '').trim(), status: data.status || 'ativo' }
-    if (!record.full_name) { alert('Digite o nome do paciente.'); return }
+    if (!record.full_name) { showNotice('Digite o nome do paciente.'); return }
     if (hasSupabase) {
       const payload = cleanForSupabase(record)
       let result
@@ -150,8 +177,8 @@ function AgendaApp({ onLogout }) {
     setModal(null)
   }
   async function deletePatient(id) {
-    if (!confirm('Excluir paciente? As consultas dele serão mantidas sem vínculo.')) return
-    if (hasSupabase) { const { error } = await supabase.from('lena_neuro_2026_patients').delete().eq('id', id); if (error) { alert('Não foi possível excluir o paciente: ' + error.message); return }; await refresh() }
+    if (!(await askConfirmation('Excluir paciente? As consultas dele serão mantidas sem vínculo.', 'Excluir paciente'))) return
+    if (hasSupabase) { const { error } = await supabase.from('lena_neuro_2026_patients').delete().eq('id', id); if (error) { showNotice('Não foi possível excluir o paciente: ' + error.message); return }; await refresh() }
     else { const list = patients.filter(p=>p.id!==id); const listA = appointments.map(a=>a.patient_id===id?{...a,patient_id:null}:a); setPatients(list); setAppointments(listA); saveLocal('lena_patients', list); saveLocal('lena_appointments', listA) }
   }
   function appointmentMinutes(value) {
@@ -178,7 +205,7 @@ function AgendaApp({ onLogout }) {
   }
   function warnConflicts(conflicts) {
     const summary = conflicts.slice(0, 6).map(c => `${formatDateBR(c.appointment_date)} às ${String(c.appointment_time).slice(0,5)}`).join('\n')
-    alert(`Horário ocupado. Não é possível colocar dois pacientes no mesmo período.\n\n${summary}\n\nEscolha outra data ou outro horário.`)
+    showNotice(`Horário ocupado. Não é possível colocar dois pacientes no mesmo período.\n\n${summary}\n\nEscolha outra data ou outro horário.`)
   }
   async function saveAppointment(data, recurrenceOpts={repeat:'none', count:1}) {
     const patient = patients.find(p => p.id === data.patient_id)
@@ -195,8 +222,8 @@ function AgendaApp({ onLogout }) {
       payment_status: data.payment_status || 'pendente',
       service_type: data.service_type || 'Avaliação'
     }
-    if (!record.patient_name) { alert('Selecione ou cadastre um paciente antes de salvar a consulta.'); return }
-    if (!record.appointment_date || !record.appointment_time) { alert('Informe data e horário da consulta.'); return }
+    if (!record.patient_name) { showNotice('Selecione ou cadastre um paciente antes de salvar a consulta.'); return }
+    if (!record.appointment_date || !record.appointment_time) { showNotice('Informe data e horário da consulta.'); return }
     const records = makeRecurringAppointments(record, recurrenceOpts)
     const conflicts = detectConflicts(records)
     if (conflicts.length) { warnConflicts(conflicts); return }
@@ -219,7 +246,7 @@ function AgendaApp({ onLogout }) {
     if (!item.recurrence_group_id || scope === 'one') return saveAppointment({ ...item, ...updateData })
     const targets = appointments.filter(a => a.recurrence_group_id === item.recurrence_group_id && (scope === 'future' ? a.appointment_date >= item.appointment_date : true))
     if (!targets.length) return saveAppointment({ ...item, ...updateData })
-    if (!confirm(`Alterar ${targets.length} consulta(s) desta recorrência?`)) return
+    if (!(await askConfirmation(`Alterar ${targets.length} consulta(s) desta recorrência?`, 'Alterar recorrência'))) return
     const changedDate = updateData.appointment_date && updateData.appointment_date !== item.appointment_date
     const changedTime = updateData.appointment_time && updateData.appointment_time !== item.appointment_time
     const updates = targets.map(t => ({
@@ -244,19 +271,20 @@ function AgendaApp({ onLogout }) {
   async function deleteAppointment(item) {
     let ids = [item.id]
     if (item.recurrence_group_id) {
-      const scope = prompt('Esta consulta faz parte de uma recorrência. Digite:\n1 = excluir apenas esta\n2 = esta e próximas\n3 = toda a sequência', '1')
+      const scope = await askChoice('Escolha quais consultas deseja excluir.', [{value:'1',label:'Apenas esta consulta'},{value:'2',label:'Esta e próximas'},{value:'3',label:'Toda a sequência'}], 'Excluir recorrência')
+      if (!scope) return
       if (scope === '2') ids = appointments.filter(a=>a.recurrence_group_id===item.recurrence_group_id && a.appointment_date >= item.appointment_date).map(a=>a.id)
       if (scope === '3') ids = appointments.filter(a=>a.recurrence_group_id===item.recurrence_group_id).map(a=>a.id)
     }
-    if (!confirm(`Excluir ${ids.length} consulta(s)?`)) return
-    if (hasSupabase) { const { error } = await supabase.from('lena_neuro_2026_appointments').delete().in('id', ids); if (error) { alert('Não foi possível excluir a consulta: ' + error.message); return }; await refresh() }
+    if (!(await askConfirmation(`Excluir ${ids.length} consulta(s)? Essa ação não pode ser desfeita.`, 'Excluir consulta'))) return
+    if (hasSupabase) { const { error } = await supabase.from('lena_neuro_2026_appointments').delete().in('id', ids); if (error) { showNotice('Não foi possível excluir a consulta: ' + error.message); return }; await refresh() }
     else { const set = new Set(ids); const list = appointments.filter(a=>!set.has(a.id)); setAppointments(list); saveLocal('lena_appointments', list) }
   }
   async function saveSettings(data) {
     const record = { ...settings, ...data, id: 'main', default_duration: toNumberZero(data.default_duration), default_price: nullableNumber(data.default_price) }
     if (hasSupabase) { const { error } = await supabase.from('lena_neuro_2026_settings').upsert(cleanForSupabase(record), { onConflict: 'id' }); if (error) { showSupabaseError('Não foi possível salvar as configurações no Supabase', error); return }; await refresh() }
     else { setSettings(record); saveLocal('lena_settings', record) }
-    alert('Configurações salvas')
+    showNotice('Configurações salvas')
   }
 
   const dayAppointments = appointments.filter(a => a.appointment_date === selectedDate).sort((a,b)=>String(a.appointment_time).localeCompare(String(b.appointment_time)))
@@ -265,7 +293,8 @@ function AgendaApp({ onLogout }) {
   const nextAppointment = todayAppointments.find(a => a.status !== 'cancelada' && String(a.appointment_time).slice(0,5) >= new Date().toTimeString().slice(0,5))
 
   return <div className="phone-app">
-    <header className="topbar"><h1>AGENDA LENA<br/>NEUROPSICÓLOGA</h1><button className="icon-only" onClick={onLogout}><LogOut size={24}/></button></header>
+    <header className="topbar"><h1>AGENDA LENA<br/>NEUROPSICÓLOGA</h1><div className="lena-header-actions"><button className="icon-only lena-bell" aria-label={`Notificações: ${unreadCount} não lidas`} onClick={()=>setNotificationsOpen(v=>!v)}><Bell size={21}/>{unreadCount > 0 && <span className="lena-bell-count">{unreadCount > 99 ? '99+' : unreadCount}</span>}</button><button className="icon-only" aria-label="Sair da agenda" onClick={onLogout}><LogOut size={22}/></button></div></header>
+    {notificationsOpen && <div className="lena-notifications" role="region" aria-label="Notificações da agenda"><div className="lena-notification-heading"><strong>Notificações</strong><button onClick={()=>setNotificationsOpen(false)} aria-label="Fechar notificações"><X size={17}/></button></div><p>Consultas nas próximas 48 horas</p>{notifications.length ? notifications.map(item=><button className={`lena-notification-item ${seenNotifications.includes(item.id) ? 'is-seen' : ''}`} key={item.id} onClick={()=>openNotification(item)}><span className="lena-notification-dot"/><span><b>{item.patient_name || item.patient_name_snapshot || 'Paciente'}</b><small>{formatDateBR(item.appointment_date)} às {String(item.appointment_time).slice(0,5)} · {labelStatus(item.status)}</small></span><ChevronRight size={17}/></button>) : <div className="lena-notification-empty">Nenhuma consulta próxima.</div>}</div>
 
     {loading && <div className="loading">Carregando...</div>}
     {!loading && tab === 'hoje' && <TodayScreen selectedDate={isoToday} appointments={todayAppointments} pendingPayments={pendingPayments} nextAppointment={nextAppointment} onNew={()=>{setSelectedDate(isoToday); setModal({type:'appointment'})}} onEdit={(a)=>setModal({type:'appointment', item:a})} onDelete={deleteAppointment} />}
@@ -393,4 +422,4 @@ function labelPatient(s){return {ativo:'Ativo',em_avaliacao:'Em avaliação',fin
 function labelRepeat(s){return {weekly:'Semanal',biweekly:'Quinzenal',monthly:'Mensal'}[s]||'Recorrente'}
 function timeOpts(){ const arr=[]; for(let h=6;h<=22;h++) arr.push(`${String(h).padStart(2,'0')}:00`); return arr }
 
-createRoot(document.getElementById('root')).render(<App />)
+createRoot(document.getElementById('root')).render(<><App /><LenaDialogHost /></>)
